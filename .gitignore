@@ -1,0 +1,43 @@
+# Local runtime state
+*.db
+*.sqlite
+*.sqlite3
+hermes.db
+hermes_config.json
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Firmware/build artifacts
+*.bin
+*.elf
+*.map
+*.uf2
+*.hex
+*.apk
+*.zip
+.pio/
+build/
+dist/
+
+# Local upstream clones kept as references, not vendored
+/HermesBase/
+/HermesX/
+/MeshBBS/
+/MeshBridge/
+/MeshCore/
+/meshcore_firmware/
+
+# Local captures / temporary payloads
+*.tmp
+*.bak
