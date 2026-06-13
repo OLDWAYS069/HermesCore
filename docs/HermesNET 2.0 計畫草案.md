@@ -346,6 +346,105 @@ Mesh Network
 - 防災系統整合
 - HermesNET 示範網路
 
+## 十二、地方網與骨幹網分流
+
+HermesNET 應明確分成兩張網：
+
+```text
+地方網 Local Mesh
+  - 每個地區可使用不同頻率或 radio profile
+  - 承載自由文字、本地留言、本地 BBS、本地公告與一般狀態
+  - 預設不跨區
+
+骨幹網 Backbone Mesh
+  - 跨區域骨幹節點使用同一組骨幹頻率或 radio profile
+  - 承載 SOS、urgent NEED、跨區公告、區域摘要、gateway heartbeat 與必要同步
+  - 不承載一般自由文字
+```
+
+設計原則：
+
+```text
+Local mesh can be noisy.
+Backbone mesh must stay quiet.
+```
+
+自由文字應留在地方網。它不是進入骨幹網後再被丟棄，而是一開始就不應由 HermesCore Gateway 送上骨幹。
+
+HermesCore / HermesBASE 在這個架構中扮演 policy bridge：
+
+```text
+Local Mesh frequency
+        |
+        v
+HermesCore Gateway
+        |
+        v
+Backbone Mesh frequency
+```
+
+正式部署建議 HermesCore Gateway 使用雙 radio：
+
+```text
+Radio 1: Local Mesh frequency
+Radio 2: Backbone Mesh frequency
+```
+
+Local -> Backbone 的基本政策：
+
+```text
+SOS              allow
+NEED urgent      allow
+STATUS summary   allow
+BBS important    allow by policy
+CHAT/free text   deny
+native text      deny or local only
+unknown packet   deny
+```
+
+Backbone -> Local 的基本政策：
+
+```text
+SOS from other region        allow
+county/global announcement   allow
+resource routing request     allow
+gateway control/heartbeat    allow
+generic chat/free text       deny
+unknown packet               deny
+```
+
+HermesX 封包可加入 `net` 與 `sc` 欄位：
+
+```json
+{
+  "p": "HX302.1",
+  "i": "7f2a9c11",
+  "o": 12,
+  "v": 12,
+  "t": 2,
+  "e": "CHAT",
+  "net": "local",
+  "sc": "HLN-CITY",
+  "m": "有人需要飲用水嗎？"
+}
+```
+
+跨區緊急事件則可標成：
+
+```json
+{
+  "p": "HX302.1",
+  "i": "91aa20ef",
+  "o": 12,
+  "v": 12,
+  "t": 3,
+  "e": "SOS",
+  "net": "backbone",
+  "sc": "HLN-COUNTY",
+  "m": "花蓮市 A 區需要醫療支援"
+}
+```
+
 ## 核心結論
 
 HermesNET 的目標不是打造另一套 Meshtastic 或 MeshCore。

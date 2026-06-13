@@ -235,6 +235,61 @@ created_at
 F807BA14 -> MeshCore -> Base Tracker -> HermesCore -> SAFE event
 ```
 
+## Local / Backbone Gateway Policy
+
+HermesCore 不只是接收 MeshCore 訊息的 Web UI，也應是地方網與骨幹網之間的 policy bridge。
+
+建議部署模型：
+
+```text
+Local Mesh radio
+  - 地方頻率
+  - 自由文字、本地留言、本地 BBS、本地公告
+
+Backbone Mesh radio
+  - 骨幹頻率
+  - SOS、urgent NEED、跨區公告、區域摘要、gateway heartbeat
+```
+
+正式版 HermesCore Gateway 建議使用雙 radio：
+
+```text
+Radio 1: Local Mesh frequency
+Radio 2: Backbone Mesh frequency
+```
+
+HermesCore 的核心規則：
+
+```text
+Local mesh can be noisy.
+Backbone mesh must stay quiet.
+```
+
+Local -> Backbone：
+
+```text
+SOS              allow
+NEED urgent      allow
+STATUS summary   allow
+BBS important    allow by policy
+CHAT/free text   deny
+native text      deny or local only
+unknown packet   deny
+```
+
+Backbone -> Local：
+
+```text
+SOS from other region        allow
+county/global announcement   allow
+resource routing request     allow
+gateway control/heartbeat    allow
+generic chat/free text       deny
+unknown packet               deny
+```
+
+自由文字不應進入骨幹網。若使用者透過 HermesCore 的留言或聊天功能送出自由文字，HermesCore 應將它標記為 `net=local`，並只在地方網下發。跨區資訊必須是 SOS、urgent NEED、管理公告、摘要或明確允許的 BBS 內容。
+
 ## 目前狀態
 
 已完成：

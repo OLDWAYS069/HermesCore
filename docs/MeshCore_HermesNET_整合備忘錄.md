@@ -476,3 +476,84 @@ secret: 已放在 PoC 設定中，正式部署前應移到 private config 或環
 7. 第二顆 Tracker 加入同一 channel
 8. 第二顆 Tracker 發 SAFE / SOS / NEED 測試
 ```
+
+# 2026-06-13 補充：地方網 / 骨幹網 / 韌體過濾
+
+HermesNET 的 LoRa 網路應分成地方網與骨幹網。
+
+```text
+地方網 Local Mesh
+  - 每個地區可使用不同頻率或 radio profile
+  - 承載自由文字、本地留言、本地 BBS、本地公告
+  - 預設不跨區
+
+骨幹網 Backbone Mesh
+  - 跨區骨幹節點使用同一組骨幹頻率或 radio profile
+  - 承載 SOS、urgent NEED、跨區公告、區域摘要、gateway heartbeat
+  - 不承載一般自由文字
+```
+
+HermesCore Gateway 是 Local Mesh 與 Backbone Mesh 的 policy bridge。
+
+正式部署建議使用雙 radio：
+
+```text
+HermesCore Gateway
+  Radio 1 -> Local Mesh frequency
+  Radio 2 -> Backbone Mesh frequency
+```
+
+單 radio 切頻可以作為實驗，但不適合作為正式骨幹方案，因為容易漏包、延遲高，且 SOS / urgent NEED 不能依賴切頻窗口。
+
+## 轉送政策
+
+Local -> Backbone：
+
+```text
+SOS              allow
+NEED urgent      allow
+STATUS summary   allow
+BBS important    allow by policy
+CHAT/free text   deny
+native text      deny or local only
+unknown packet   deny
+```
+
+Backbone -> Local：
+
+```text
+SOS from other region        allow
+county/global announcement   allow
+resource routing request     allow
+gateway control/heartbeat    allow
+generic chat/free text       deny
+unknown packet               deny
+```
+
+重點是：自由文字不是進入骨幹後再丟掉，而是一開始就不應由 HermesCore Gateway 送上骨幹。
+
+## 與 MeshCore / Meshtastic 韌體的關係
+
+HermesCore 可以控制應用層轉發，但如果要阻止原生 MeshCore / Meshtastic 自由文字被 repeater 擴散，必須在韌體的 rebroadcast decision 前處理。
+
+我們控制的 MeshCore / Meshtastic 韌體可加入分類政策：
+
+```text
+HERMESX        forward by net / scope / TTL policy
+SOS/NEED       allow by emergency policy
+NATIVE_TEXT    local only or drop at boundary
+UNKNOWN        drop
+TELEMETRY      rate limit
+```
+
+韌體過濾的目標不是消除外部裝置第一次發射造成的 airtime，而是避免我們控制的節點把不該擴散的封包二次放大。
+
+因此正式策略應同時使用：
+
+```text
+1. 地方網與骨幹網分頻
+2. HermesCore Gateway policy bridge
+3. HermesX origin / via / TTL / scope metadata
+4. 我們控制節點的 firmware filter
+5. rate limit 與 trusted node policy
+```

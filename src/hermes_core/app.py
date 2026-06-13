@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
 import json
 import queue
+import secrets
 import sqlite3
 import struct
 import threading
 import time
+import uuid
 
 import serial
 from fastapi import FastAPI
@@ -33,6 +35,8 @@ DEFAULT_CHANNEL = {
 SYSTEM_EVENT_TYPES = {
     "COMPANION_RX",
     "COMPANION_TX",
+    "HERMES_DUPLICATE",
+    "HERMES_LOOPBACK",
     "KISS_FRAME",
     "MESSAGES_WAITING",
     "NO_MORE_MESSAGES",
@@ -87,7 +91,9 @@ COMP_CMD_SEND_CHANNEL_DATA = 0x3E
 
 HERMES_DATA_TYPE_BBS = 0xFF01
 HERMES_DATA_TYPE_NOTE = 0xFF02
+HERMES_DATA_TYPE_EVENT = 0xFF03
 HERMES_PROTOCOL_CODE = "HX302.1"
+HERMES_DEFAULT_TTL = 2
 
 COMP_PACKET_OK = 0x00
 COMP_PACKET_ERROR = 0x01
@@ -228,6 +234,20 @@ def init_db():
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS seen_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id TEXT NOT NULL,
+            origin_core INTEGER NOT NULL,
+            via_core INTEGER,
+            source_transport TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            first_seen_at TEXT NOT NULL,
+            UNIQUE(message_id, origin_core)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS bbs_boards (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
@@ -304,6 +324,7 @@ def load_config():
             "transport_mode": TRANSPORT_MODE,
             "radio_profile": DEFAULT_RADIO_PROFILE,
             "channel": DEFAULT_CHANNEL,
+            "core_id": secrets.randbelow(65535) + 1,
         }
         save_config(config)
         return config
@@ -320,6 +341,9 @@ def load_config():
         changed = True
     if "channel" not in config:
         config["channel"] = DEFAULT_CHANNEL
+        changed = True
+    if "core_id" not in config:
+        config["core_id"] = secrets.randbelow(65535) + 1
         changed = True
     if changed:
         save_config(config)
@@ -345,6 +369,84 @@ def get_channel_config():
     merged = dict(DEFAULT_CHANNEL)
     merged.update(channel)
     return merged
+
+
+def get_core_id():
+    return int(load_config().get("core_id") or 0)
+
+
+def new_message_id():
+    return uuid.uuid4().hex[:8]
+
+
+def mark_seen_message(message_id, origin_core, via_core, source_transport, event_type):
+    if not message_id or origin_core is None:
+        return True
+    conn = db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO seen_messages (
+                message_id, origin_core, via_core, source_transport,
+                event_type, first_seen_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(message_id),
+                int(origin_core),
+                int(via_core) if via_core is not None else None,
+                source_transport,
+                event_type,
+                now_iso(),
+            ),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+
+def hermes_message_meta(doc: dict, default_type="HERMES_DATA"):
+    packet_type = doc.get("e")
+    if not packet_type and isinstance(doc.get("t"), str):
+        packet_type = doc.get("t")
+    ttl = doc.get("t") if isinstance(doc.get("t"), int) else doc.get("ttl")
+    try:
+        ttl = int(ttl)
+    except (TypeError, ValueError):
+        ttl = 0
+    try:
+        origin_core = int(doc["o"]) if doc.get("o") is not None else None
+    except (TypeError, ValueError):
+        origin_core = None
+    try:
+        via_core = int(doc["v"]) if doc.get("v") is not None else None
+    except (TypeError, ValueError):
+        via_core = None
+    return {
+        "message_id": str(doc.get("i") or ""),
+        "origin_core": origin_core,
+        "via_core": via_core,
+        "ttl": ttl,
+        "packet_type": packet_type or default_type,
+    }
+
+
+def add_hermes_envelope(doc: dict, packet_type: str, ttl: int = HERMES_DEFAULT_TTL, message_id: str | None = None):
+    core_id = get_core_id()
+    wrapped = {
+        "p": HERMES_PROTOCOL_CODE,
+        "i": message_id or new_message_id(),
+        "o": core_id,
+        "v": core_id,
+        "t": int(ttl),
+        "e": packet_type,
+    }
+    wrapped.update(doc)
+    mark_seen_message(wrapped["i"], core_id, core_id, "local", packet_type)
+    return wrapped
 
 
 def set_channel_config(channel):
@@ -579,16 +681,17 @@ def list_noteboard_notes(category=None, limit=80):
 
 
 def build_note_datagram(note: dict) -> bytes:
-    doc = {
-        "p": HERMES_PROTOCOL_CODE,
-        "t": "NOTE",
-        "c": note["category"],
-        "s": note["title"],
-        "m": note["body"],
-        "a": note["author"],
-        "r": note["priority"],
-        "l": note["location"],
-    }
+    doc = add_hermes_envelope(
+        {
+            "c": note["category"],
+            "s": note["title"],
+            "m": note["body"],
+            "a": note["author"],
+            "r": note["priority"],
+            "l": note["location"],
+        },
+        "NOTE",
+    )
     while True:
         raw = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if len(raw) <= 163:
@@ -900,6 +1003,26 @@ def companion_queue_channel_data(data_type: int, payload_bytes: bytes, channel_i
     queue_companion_payload(payload, f"send data channel {idx} type=0x{data_type:04x} len={len(payload_bytes)}")
 
 
+def build_event_datagram(event_type: str, message: str, source_node: str = "dashboard", region: str = "local") -> bytes:
+    doc = add_hermes_envelope(
+        {
+            "k": event_type,
+            "m": message,
+            "a": source_node,
+            "l": region,
+        },
+        "EVENT",
+    )
+    while True:
+        raw = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(raw) <= 163:
+            return raw
+        if len(doc["m"]) > 20:
+            doc["m"] = doc["m"][:-10]
+        else:
+            return raw[:163]
+
+
 def build_bbs_datagram(
     board: str,
     kind: str,
@@ -909,17 +1032,18 @@ def build_bbs_datagram(
     priority: str,
     location: str,
 ) -> bytes:
-    doc = {
-        "p": HERMES_PROTOCOL_CODE,
-        "t": "BBS_POST",
-        "b": board,
-        "k": kind,
-        "s": title,
-        "m": body,
-        "a": author,
-        "r": priority,
-        "l": location,
-    }
+    doc = add_hermes_envelope(
+        {
+            "b": board,
+            "k": kind,
+            "s": title,
+            "m": body,
+            "a": author,
+            "r": priority,
+            "l": location,
+        },
+        "BBS_POST",
+    )
     while True:
         raw = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if len(raw) <= 163:
@@ -1117,7 +1241,7 @@ def parse_companion_channel_data(data: bytes):
 
 
 def handle_hermes_channel_data(parsed):
-    if parsed.get("data_type") not in (HERMES_DATA_TYPE_BBS, HERMES_DATA_TYPE_NOTE):
+    if parsed.get("data_type") not in (HERMES_DATA_TYPE_BBS, HERMES_DATA_TYPE_NOTE, HERMES_DATA_TYPE_EVENT):
         return None
 
     raw = parsed["payload_bytes"]
@@ -1137,7 +1261,45 @@ def handle_hermes_channel_data(parsed):
             "raw_message": "unknown Hermes datagram",
         }
 
-    if parsed.get("data_type") == HERMES_DATA_TYPE_NOTE and doc.get("t") == "NOTE":
+    meta = hermes_message_meta(doc)
+    if meta["message_id"] and meta["origin_core"] == get_core_id():
+        return {
+            "event_type": "HERMES_LOOPBACK",
+            "payload": {"data_type": parsed.get("data_type"), "meta": meta},
+            "raw_message": f"drop loopback {meta['message_id']}",
+        }
+    if meta["message_id"] and not mark_seen_message(
+        meta["message_id"],
+        meta["origin_core"],
+        meta["via_core"],
+        "meshcore-data",
+        meta["packet_type"],
+    ):
+        return {
+            "event_type": "HERMES_DUPLICATE",
+            "payload": {"data_type": parsed.get("data_type"), "meta": meta},
+            "raw_message": f"drop duplicate {meta['message_id']}",
+        }
+
+    if parsed.get("data_type") == HERMES_DATA_TYPE_EVENT and meta["packet_type"] == "EVENT":
+        event_type = str(doc.get("k") or "MESSAGE").strip().upper()
+        message = str(doc.get("m") or "").strip()
+        source_node = str(doc.get("a") or f"core-{meta['origin_core'] or 'unknown'}").strip()
+        region = str(doc.get("l") or "mesh").strip()
+        return {
+            "event_type": event_type,
+            "payload": {
+                "message": message,
+                "source_node": source_node,
+                "region": region,
+                "data_type": parsed.get("data_type"),
+                "snr": parsed.get("snr"),
+                "meta": meta,
+            },
+            "raw_message": message or event_type,
+        }
+
+    if parsed.get("data_type") == HERMES_DATA_TYPE_NOTE and meta["packet_type"] == "NOTE":
         note = {
             "category": str(doc.get("c") or "notice").strip().lower(),
             "title": str(doc.get("s") or "Untitled").strip(),
@@ -1156,11 +1318,11 @@ def handle_hermes_channel_data(parsed):
             }
         return {
             "event_type": "NOTE",
-            "payload": {"note": saved, "data_type": parsed.get("data_type"), "snr": parsed.get("snr")},
+            "payload": {"note": saved, "data_type": parsed.get("data_type"), "snr": parsed.get("snr"), "meta": meta},
             "raw_message": f"[{saved['category']}] {saved['title']}",
         }
 
-    if parsed.get("data_type") != HERMES_DATA_TYPE_BBS or doc.get("t") != "BBS_POST":
+    if parsed.get("data_type") != HERMES_DATA_TYPE_BBS or meta["packet_type"] != "BBS_POST":
         return {
             "event_type": "HERMES_DATA",
             "payload": {"data_type": parsed.get("data_type"), "doc": doc},
@@ -1213,7 +1375,7 @@ def handle_hermes_channel_data(parsed):
 
     return {
         "event_type": "BBS_POST",
-        "payload": {"post": post, "data_type": parsed.get("data_type"), "snr": parsed.get("snr")},
+        "payload": {"post": post, "data_type": parsed.get("data_type"), "snr": parsed.get("snr"), "meta": meta},
         "raw_message": f"[{board}] {title}",
     }
 
@@ -1477,6 +1639,7 @@ def startup():
 def health():
     return {
         "status": "ok",
+        "core_id": get_core_id(),
         "serial_port": SERIAL_PORT,
         "baud": SERIAL_BAUD,
         "serial": serial_state,
@@ -1637,11 +1800,21 @@ def send_mesh_message(message: MeshMessageIn):
 
     companion_queue_channel_message(text, message.channel_index)
     event_type = classify_message(text, "")
+    if event_type in {"SAFE", "SOS", "NEED", "STATUS", "RESOURCE", "HEARTBEAT"}:
+        companion_queue_channel_data(
+            HERMES_DATA_TYPE_EVENT,
+            build_event_datagram(event_type, text, source_node="dashboard", region="local"),
+            message.channel_index,
+        )
     insert_event(
         event_type=event_type,
         source_node="dashboard",
         region="local",
-        payload={"message": text, "channel_index": message.channel_index or get_channel_config()["index"]},
+        payload={
+            "message": text,
+            "channel_index": message.channel_index or get_channel_config()["index"],
+            "core_id": get_core_id(),
+        },
         transport="meshcore-companion-usb",
         raw_message=text,
     )
