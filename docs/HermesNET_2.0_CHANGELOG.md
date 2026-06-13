@@ -1,5 +1,20 @@
 # HermesNET 2.0 進度紀錄
 
+## 2026-06-13 00:30:00 +08:00
+
+### 已完成
+- 整理 HermesCore repo 的主要程式位置。
+- 將主程式由暫存感較重的路徑移到正式 source tree：
+  - 舊路徑：`pi_payloads/hermes_core_app.py`
+  - 新路徑：`src/hermes_core/app.py`
+- 更新 README 的專案結構與部署指令。
+- 更新 MeshCore / HermesNET 整合備忘錄中的部署指令。
+
+### 判斷
+- 本地工作區仍保留 MeshCore、MeshBBS、MeshBridge、HermesX 等 upstream clone 作為參考與開發用。
+- HermesCore repo 真正追蹤的主程式是 `src/hermes_core/app.py`。
+- 外部 upstream clone 仍維持 git ignored，不會被推到遠端。
+
 ## 2026-06-13 00:00:00 +08:00
 
 ### 已完成

@@ -35,7 +35,7 @@ http://HermesBASEv1.local:8000
 
 ```text
 docs/         專案文件、changelog、整合計畫與技術備忘
-pi_payloads/  部署到 Raspberry Pi 的 HermesCore FastAPI 應用程式
+src/          HermesCore 主程式
 ```
 
 相關 upstream 專案：
@@ -54,7 +54,7 @@ HermesCORE 目前只保存 Base Gateway 應用程式與專案文件；MeshCore f
 從 Windows PowerShell 執行：
 
 ```powershell
-scp "G:\geek_guys_oldways\hermesbase\pi_payloads\hermes_core_app.py" oldways@HermesBASEv1.local:~/HermesCore/app.py
+scp "G:\geek_guys_oldways\hermesbase\src\hermes_core\app.py" oldways@HermesBASEv1.local:~/HermesCore/app.py
 ```
 
 在 Raspberry Pi 上執行：

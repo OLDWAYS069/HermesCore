@@ -340,7 +340,7 @@ MEDICAL_NEED
 Windows PowerShell：
 
 ```powershell
-scp "G:\geek_guys_oldways\hermesbase\pi_payloads\hermes_core_app.py" oldways@HermesBASEv1.local:~/HermesCore/app.py
+scp "G:\geek_guys_oldways\hermesbase\src\hermes_core\app.py" oldways@HermesBASEv1.local:~/HermesCore/app.py
 ```
 
 Pi SSH：

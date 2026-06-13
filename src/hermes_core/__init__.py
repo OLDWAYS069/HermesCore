@@ -1,0 +1,1 @@
+"""HermesCore gateway application."""
