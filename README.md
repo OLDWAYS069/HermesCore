@@ -1,17 +1,19 @@
 # HermesCORE
 
-HermesCORE is the Raspberry Pi gateway layer for HermesNET 2.0.
+HermesCORE 是 HermesNET 2.0 的 Raspberry Pi Base Gateway 層。
 
-It connects a MeshCore Base Tracker over USB companion mode, stores received events in SQLite, and exposes a local web UI for:
+它負責透過 MeshCore 的 USB companion 模式連接 Base Tracker，將收到的事件寫入 SQLite，並提供本地瀏覽器介面給現場人員操作。
 
-- HermesNET event dashboard
-- MeshCore gateway management
-- Hermes BBS / MeshBBS-style board posts
-- HermesX 302.1 data packet experiments
+目前功能包含：
 
-## Current Runtime
+- HermesNET 事件儀表板
+- MeshCore Gateway 管理介面
+- Hermes BBS / MeshBBS 風格看板文章
+- HermesX 302.1 data packet 實驗
 
-Target device:
+## 目前運作環境
+
+目標設備：
 
 ```text
 Raspberry Pi 4B
@@ -23,20 +25,20 @@ Baud: 115200
 MeshCore firmware role: companion_radio_usb
 ```
 
-Local URL:
+本地網址：
 
 ```text
 http://HermesBASEv1.local:8000
 ```
 
-## Repository Layout
+## 專案結構
 
 ```text
-docs/         Project notes, changelog, integration plans
-pi_payloads/  HermesCore FastAPI application deployed to the Raspberry Pi
+docs/         專案文件、changelog、整合計畫與技術備忘
+pi_payloads/  部署到 Raspberry Pi 的 HermesCore FastAPI 應用程式
 ```
 
-The workspace also references these upstream projects during development:
+開發過程中會參考以下 upstream 專案：
 
 ```text
 MeshCore    https://github.com/meshcore-dev/MeshCore
@@ -45,17 +47,17 @@ MeshBridge  https://github.com/SCWhite/MeshBridge
 HermesX     https://github.com/OLDWAYS069/HermesX
 ```
 
-Those upstream repos are intentionally not vendored into this repository. Keep local clones beside this project when development needs firmware or upstream reference code.
+這些 upstream repo 不會直接 vendoring 進本 repo。需要 firmware 或參考 upstream code 時，請把它們 clone 在本專案旁邊即可。
 
-## Deploy To Raspberry Pi
+## 部署到 Raspberry Pi
 
-From Windows PowerShell:
+從 Windows PowerShell 執行：
 
 ```powershell
 scp "G:\geek_guys_oldways\hermesbase\pi_payloads\hermes_core_app.py" oldways@HermesBASEv1.local:~/HermesCore/app.py
 ```
 
-On the Raspberry Pi:
+在 Raspberry Pi 上執行：
 
 ```bash
 cd ~/HermesCore
@@ -64,24 +66,35 @@ sudo systemctl restart hermes-core
 sudo systemctl status hermes-core --no-pager
 ```
 
-## Quick Checks
+## 快速檢查
 
-On the Raspberry Pi:
+在 Raspberry Pi 上：
 
 ```bash
 curl http://localhost:8000/api/health
 curl http://localhost:8000/api/radio
 ```
 
-From Windows PowerShell:
+從 Windows PowerShell：
 
 ```powershell
 Invoke-RestMethod "http://HermesBASEv1.local:8000/api/health"
 ```
 
-## Notes
+## 目前設計重點
 
-- BBS posts use HermesX protocol code `HX302.1`.
-- BBS datagrams use data type `0xFF01`.
-- The old Noteboard page is kept as a prototype but the main upper-layer app is `/bbs`.
-- `SAFE`, `SOS`, `NEED`, and `STATUS` are intentionally kept as protocol-facing event codes even when the UI is localized.
+- BBS post 使用 HermesX protocol code：`HX302.1`
+- BBS datagram 使用 data type：`0xFF01`
+- 舊的 Noteboard 頁面目前保留為 prototype，但主要上層應用已收斂到 `/bbs`
+- `SAFE`、`SOS`、`NEED`、`STATUS` 是 protocol-facing event code，即使 UI 中文化也會保留原代碼
+
+## 不放進本 repo 的內容
+
+以下內容會保留在本地工作區，但不推進 HermesCORE repo：
+
+- MeshCore / MeshBBS / MeshBridge / HermesX upstream clone
+- firmware binary
+- APK
+- `.pio` build output
+- SQLite runtime database
+- 本地設定檔與 channel secret
