@@ -38,7 +38,7 @@ docs/         專案文件、changelog、整合計畫與技術備忘
 pi_payloads/  部署到 Raspberry Pi 的 HermesCore FastAPI 應用程式
 ```
 
-開發過程中會參考以下 upstream 專案：
+相關 upstream 專案：
 
 ```text
 MeshCore    https://github.com/meshcore-dev/MeshCore
@@ -47,7 +47,7 @@ MeshBridge  https://github.com/SCWhite/MeshBridge
 HermesX     https://github.com/OLDWAYS069/HermesX
 ```
 
-這些 upstream repo 不會直接 vendoring 進本 repo。需要 firmware 或參考 upstream code 時，請把它們 clone 在本專案旁邊即可。
+HermesCORE 目前只保存 Base Gateway 應用程式與專案文件；MeshCore firmware、MeshBBS、MeshBridge、HermesX 等來源專案請依需求從各自 upstream 取得。
 
 ## 部署到 Raspberry Pi
 
@@ -88,13 +88,13 @@ Invoke-RestMethod "http://HermesBASEv1.local:8000/api/health"
 - 舊的 Noteboard 頁面目前保留為 prototype，但主要上層應用已收斂到 `/bbs`
 - `SAFE`、`SOS`、`NEED`、`STATUS` 是 protocol-facing event code，即使 UI 中文化也會保留原代碼
 
-## 不放進本 repo 的內容
+## Repository Policy
 
-以下內容會保留在本地工作區，但不推進 HermesCORE repo：
+本 repo 不保存下列內容：
 
-- MeshCore / MeshBBS / MeshBridge / HermesX upstream clone
 - firmware binary
 - APK
-- `.pio` build output
+- build output
 - SQLite runtime database
-- 本地設定檔與 channel secret
+- 本地設定檔
+- channel secret
