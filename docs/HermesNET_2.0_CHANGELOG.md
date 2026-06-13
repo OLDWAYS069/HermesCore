@@ -1,5 +1,30 @@
 # HermesNET 2.0 進度紀錄
 
+## 2026-06-13 00:00:00 +08:00
+
+### 已完成
+- 建立 GitHub 遠端專案：
+  - `https://github.com/OLDWAYS069/HermesCore.git`
+- 將 HermesCORE 本地專案推送到遠端 `main`。
+- 初始化 repo 內容：
+  - `README.md`
+  - `.gitignore`
+  - `docs/`
+  - `pi_payloads/hermes_core_app.py`
+- 遠端原本已有 GitHub 初始 README commit，已用 merge 方式接上，不使用 force push。
+- README 已改為中文。
+- README 後續已精簡：
+  - 移除本地工作區 clone 擺放資訊。
+  - 移除 `Repository Policy` 區塊。
+- 本地 `main` 已設定追蹤 `origin/main`。
+
+### 相關 Commit
+- `a99e8f1` Initial HermesCORE gateway project
+- `5a5b5d1` Merge remote HermesCore scaffold
+- `2da7c0f` Translate README to Chinese
+- `afa51fc` Clarify public README scope
+- `ee5ddf8` Remove README repository policy section
+
 ## 2026-06-12 01:05:00 +08:00
 
 ### 已完成
